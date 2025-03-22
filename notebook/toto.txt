@@ -1,0 +1,61 @@
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, DepthwiseConv2D, BatchNormalization, Activation, GlobalAveragePooling2D, Dense, Dropout, MaxPool2D, Multiply, Reshape, Input
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import ReduceLROnPlateau
+
+# Squeeze-and-Excitation Block
+def se_block(input_tensor, ratio=16):
+    """Squeeze-and-Excitation Block to enhance feature selection"""
+    channels = input_tensor.shape[-1]
+    squeeze = GlobalAveragePooling2D()(input_tensor)
+    squeeze = Dense(channels // ratio, activation='relu')(squeeze)
+    squeeze = Dense(channels, activation='sigmoid')(squeeze)
+    squeeze = Reshape((1, 1, channels))(squeeze)
+    return Multiply()([input_tensor, squeeze])
+
+# Build model
+model = Sequential()
+
+# Convolutional Base (Inspired by EfficientNet)
+model.add(Conv2D(16, (3,3), strides=1, padding="same", activation="relu", input_shape=(224, 224, 3)))
+model.add(BatchNormalization())
+model.add(MaxPool2D((2,2)))
+
+model.add(DepthwiseConv2D((3,3), strides=1, padding="same", activation="relu"))  # Depthwise Separable Conv
+model.add(BatchNormalization())
+model.add(Conv2D(32, (1,1), activation="relu"))  # Pointwise Convolution
+model.add(MaxPool2D((2,2)))
+
+model.add(DepthwiseConv2D((3,3), strides=1, padding="same", activation="relu"))
+model.add(BatchNormalization())
+model.add(Conv2D(64, (1,1), activation="relu"))
+model.add(se_block(model.layers[-1].output))  # Add SE Block
+model.add(MaxPool2D((2,2)))
+
+model.add(DepthwiseConv2D((3,3), strides=1, padding="same", activation="relu"))
+model.add(BatchNormalization())
+model.add(Conv2D(128, (1,1), activation="relu"))
+model.add(se_block(model.layers[-1].output))
+model.add(MaxPool2D((2,2)))
+
+model.add(DepthwiseConv2D((3,3), strides=1, padding="same", activation="relu"))
+model.add(BatchNormalization())
+model.add(Conv2D(256, (1,1), activation="relu"))
+model.add(se_block(model.layers[-1].output))
+model.add(GlobalAveragePooling2D())
+
+# Fully Connected Layers
+model.add(Dense(128, activation='relu'))
+model.add(Dropout(0.3))
+model.add(Dense(len(train_data.class_indices), activation='softmax'))
+
+# Compile
+optimizer = Adam(learning_rate=0.0005)
+model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
+
+# Learning Rate Scheduler
+lr_scheduler = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, verbose=1)
+
+# Summary
+model.summary()
